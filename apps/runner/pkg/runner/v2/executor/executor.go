@@ -153,6 +153,8 @@ func (e *Executor) executeJob(ctx context.Context, job *apiclient.Job) (any, err
 		resultMetadata, err = e.inspectSnapshotInRegistry(ctx, job)
 	case apiclient.JOBTYPE_RECOVER_SANDBOX:
 		resultMetadata, err = e.recoverSandbox(ctx, job)
+	case apiclient.JOBTYPE_PAUSE_SANDBOX:
+		resultMetadata, err = e.pauseSandbox(ctx, job)
 	default:
 		err = fmt.Errorf("unknown job type: %s", job.GetType())
 	}
