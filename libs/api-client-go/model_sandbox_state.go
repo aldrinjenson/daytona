@@ -40,6 +40,8 @@ const (
 	SANDBOXSTATE_RESIZING SandboxState = "resizing"
 	SANDBOXSTATE_SNAPSHOTTING SandboxState = "snapshotting"
 	SANDBOXSTATE_FORKING SandboxState = "forking"
+	SANDBOXSTATE_PAUSING SandboxState = "pausing"
+	SANDBOXSTATE_PAUSED SandboxState = "paused"
 )
 
 // All allowed values of SandboxState enum
@@ -63,6 +65,8 @@ var AllowedSandboxStateEnumValues = []SandboxState{
 	"resizing",
 	"snapshotting",
 	"forking",
+	"pausing",
+	"paused",
 }
 
 func (v *SandboxState) UnmarshalJSON(src []byte) error {

@@ -496,6 +496,19 @@ type SandboxAPI interface {
 	StopSandboxExecute(r SandboxAPIStopSandboxRequest) (*Sandbox, *http.Response, error)
 
 	/*
+	PauseSandbox Pause sandbox
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param sandboxIdOrName ID or name of the sandbox
+	@return SandboxAPIPauseSandboxRequest
+	*/
+	PauseSandbox(ctx context.Context, sandboxIdOrName string) SandboxAPIPauseSandboxRequest
+
+	// PauseSandboxExecute executes the request
+	//  @return Sandbox
+	PauseSandboxExecute(r SandboxAPIPauseSandboxRequest) (*Sandbox, *http.Response, error)
+
+	/*
 	UpdateLastActivity Update sandbox last activity
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -4964,6 +4977,103 @@ func (a *SandboxAPIService) StopSandboxExecute(r SandboxAPIStopSandboxRequest) (
 	localVarHTTPHeaderAccepts := []string{"application/json"}
 
 	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.xDaytonaOrganizationID != nil {
+		parameterAddToHeaderOrQuery(localVarHeaderParams, "X-Daytona-Organization-ID", r.xDaytonaOrganizationID, "simple", "")
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
+type SandboxAPIPauseSandboxRequest struct {
+	ctx context.Context
+	ApiService SandboxAPI
+	sandboxIdOrName string
+	xDaytonaOrganizationID *string
+}
+
+func (r SandboxAPIPauseSandboxRequest) XDaytonaOrganizationID(xDaytonaOrganizationID string) SandboxAPIPauseSandboxRequest {
+	r.xDaytonaOrganizationID = &xDaytonaOrganizationID
+	return r
+}
+
+func (r SandboxAPIPauseSandboxRequest) Execute() (*Sandbox, *http.Response, error) {
+	return r.ApiService.PauseSandboxExecute(r)
+}
+
+func (a *SandboxAPIService) PauseSandbox(ctx context.Context, sandboxIdOrName string) SandboxAPIPauseSandboxRequest {
+	return SandboxAPIPauseSandboxRequest{
+		ApiService: a,
+		ctx: ctx,
+		sandboxIdOrName: sandboxIdOrName,
+	}
+}
+
+func (a *SandboxAPIService) PauseSandboxExecute(r SandboxAPIPauseSandboxRequest) (*Sandbox, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodPost
+		localVarPostBody     interface{}
+		formFiles            []formFile
+		localVarReturnValue  *Sandbox
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "SandboxAPIService.PauseSandbox")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/sandbox/{sandboxIdOrName}/pause"
+	localVarPath = strings.Replace(localVarPath, "{"+"sandboxIdOrName"+"}", url.PathEscape(parameterValueToString(r.sandboxIdOrName, "sandboxIdOrName")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	localVarHTTPContentTypes := []string{}
+
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
 	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
 	if localVarHTTPHeaderAccept != "" {
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
