@@ -18,6 +18,8 @@ const (
 	SandboxStateError           SandboxState = "error"
 	SandboxStateUnknown         SandboxState = "unknown"
 	SandboxStatePullingSnapshot SandboxState = "pulling_snapshot"
+	SandboxStatePausing         SandboxState = "pausing"
+	SandboxStatePaused          SandboxState = "paused"
 )
 
 func (s SandboxState) String() string {
