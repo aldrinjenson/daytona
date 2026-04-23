@@ -558,6 +558,41 @@ export class SandboxController {
     return this.sandboxService.toSandboxDto(sandbox)
   }
 
+  @Post(':sandboxIdOrName/pause')
+  @HttpCode(200)
+  @SkipThrottle({ authenticated: true })
+  @ThrottlerScope('sandbox-lifecycle')
+  @RequireFlagsEnabled({ flags: [{ flagKey: FeatureFlags.SANDBOX_LINUX_VM, defaultValue: false }] })
+  @ApiOperation({
+    summary: 'Pause sandbox',
+    operationId: 'pauseSandbox',
+  })
+  @ApiParam({
+    name: 'sandboxIdOrName',
+    description: 'ID or name of the sandbox',
+    type: 'string',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sandbox pause has been initiated',
+    type: SandboxDto,
+  })
+  @UseGuards(OrganizationAuthContextGuard, SandboxAccessGuard)
+  @RequiredOrganizationResourcePermissions([OrganizationResourcePermission.WRITE_SANDBOXES])
+  @Audit({
+    action: AuditAction.PAUSE,
+    targetType: AuditTarget.SANDBOX,
+    targetIdFromRequest: (req) => req.params.sandboxIdOrName,
+    targetIdFromResult: (result: SandboxDto) => result?.id,
+  })
+  async pauseSandbox(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Param('sandboxIdOrName') sandboxIdOrName: string,
+  ): Promise<SandboxDto> {
+    const sandbox = await this.sandboxService.pause(sandboxIdOrName, authContext.organization)
+    return this.sandboxService.toSandboxDto(sandbox)
+  }
+
   @Post(':sandboxIdOrName/resize')
   @HttpCode(200)
   @SkipThrottle({ authenticated: true })

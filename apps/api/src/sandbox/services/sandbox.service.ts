@@ -1724,6 +1724,56 @@ export class SandboxService {
     return updatedSandbox
   }
 
+  async pause(sandboxIdOrName: string, organization: Organization): Promise<Sandbox> {
+    const sandbox = await this.findOneByIdOrName(sandboxIdOrName, organization.id)
+
+    if (sandbox.state !== SandboxState.STARTED) {
+      throw new BadRequestError('Sandbox must be in started state to pause')
+    }
+
+    if (sandbox.pending) {
+      throw new StateChangeInProgressError()
+    }
+
+    if (!sandbox.runnerId) {
+      throw new NotFoundException(`Sandbox with ID ${sandbox.id} does not have a runner`)
+    }
+
+    const runner = await this.runnerService.findOneOrFail(sandbox.runnerId)
+
+    if (runner.runnerClass !== RunnerClass.VM) {
+      throw new HttpException('Pausing is not supported for this sandbox', HttpStatus.UNPROCESSABLE_ENTITY)
+    }
+
+    await this.sandboxRepository.updateWhere(sandbox.id, {
+      updateData: {
+        state: SandboxState.PAUSING,
+        pending: true,
+      },
+      whereCondition: {
+        state: SandboxState.STARTED,
+        pending: false,
+      },
+    })
+
+    try {
+      const runnerAdapter = await this.runnerAdapterFactory.create(runner)
+      await runnerAdapter.pauseSandbox(sandbox.id)
+    } catch (error) {
+      // Rollback to STARTED on error
+      await this.sandboxRepository.updateWhere(sandbox.id, {
+        updateData: {
+          state: SandboxState.STARTED,
+          pending: false,
+        },
+        whereCondition: { state: SandboxState.PAUSING },
+      })
+      throw error
+    }
+
+    return this.findOneByIdOrName(sandbox.id, organization.id)
+  }
+
   async recover(sandboxIdOrName: string, organization: Organization): Promise<Sandbox> {
     const sandbox = await this.findOneByIdOrName(sandboxIdOrName, organization.id)
 
