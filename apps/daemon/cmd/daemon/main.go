@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -127,9 +128,21 @@ func run() int {
 	// Mount any experimental-backend volumes inside the sandbox BEFORE any
 	// user entrypoint or daemon service starts. No-op when the runner did not
 	// inject an in-container volume spec.
+	//
+	// On failure we log to stderr (so it appears in the container's logs and
+	// the runner can grep for it) and exit non-zero — the runner detects the
+	// container's premature exit and surfaces it as a sandbox-level error.
+	// We deliberately don't try to "soldier on" with broken mounts: the user
+	// asked for the volume, and silently giving them an empty directory is
+	// strictly worse than a clear startup failure.
 	mountCtx, mountCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	volumemount.MountAll(mountCtx, logger)
+	mountErr := volumemount.MountAll(mountCtx, logger)
 	mountCancel()
+	if mountErr != nil {
+		fmt.Fprintf(os.Stderr, "daytona-daemon: volume mount failed: %v\n", mountErr)
+		logger.Error("volume mount failed; exiting", "error", mountErr)
+		return 2
+	}
 
 	sessionService := session.NewSessionService(logger, configDir, c.TerminationGracePeriod, c.TerminationCheckInterval)
 

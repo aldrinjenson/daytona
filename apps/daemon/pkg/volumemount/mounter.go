@@ -21,6 +21,7 @@ package volumemount
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -49,50 +50,141 @@ type Volume struct {
 // MountAll reads the env payload and mounts every declared volume. It is
 // idempotent — already-mounted paths are skipped.
 //
-// MountAll never errors fatally: a failed mount is logged and skipped so the
-// rest of the daemon can still come up. Callers should surface readiness
-// signals through their own paths.
+// Each volume is attempted up to mountMaxAttempts times before giving up.
+// If any volume fails after all retries, MountAll returns an error so the
+// daemon can exit non-zero and the runner can surface the failure as a
+// sandbox-level error rather than letting the sandbox come up with empty
+// mount paths.
 //
 // As a defensive measure the env vars carrying the volume spec (which contain
 // per-disk Archil mount tokens) are scrubbed from the daemon's own process
 // environment before returning. Child processes spawned later by the daemon
 // or by user code will not inherit them.
-func MountAll(ctx context.Context, logger *slog.Logger) {
+func MountAll(ctx context.Context, logger *slog.Logger) error {
 	defer scrubEnv(logger)
 
 	raw := os.Getenv(envVolumesJSON)
 	if raw == "" {
-		return
+		return nil
 	}
 
 	binary := os.Getenv(envArchilBinary)
 	if binary == "" {
-		logger.Warn("in-container volume spec present but archil binary path is empty", "env", envArchilBinary)
-		return
+		return fmt.Errorf("in-container volume spec present but %s is empty", envArchilBinary)
 	}
 	if _, err := os.Stat(binary); err != nil {
-		logger.Warn("in-container archil binary not found; skipping volume mounts", "path", binary, "error", err)
-		return
+		return fmt.Errorf("in-container archil binary not found at %q: %w", binary, err)
 	}
 
 	var volumes []Volume
 	if err := json.Unmarshal([]byte(raw), &volumes); err != nil {
-		logger.Error("failed to parse in-container volume spec", "error", err)
-		return
+		return fmt.Errorf("parse in-container volume spec: %w", err)
 	}
 
+	var failures []error
 	for _, v := range volumes {
-		if err := mountOne(ctx, logger, binary, v); err != nil {
+		if err := mountOneWithRetry(ctx, logger, binary, v); err != nil {
 			logger.Error(
-				"failed to mount in-container volume",
+				"failed to mount in-container volume after retries",
 				"volumeId", v.VolumeID,
 				"mountPath", v.MountPath,
 				"archilDisk", v.ArchilDisk,
 				"archilRegion", v.ArchilRegion,
+				"attempts", mountMaxAttempts,
 				"error", err,
 			)
-			continue
+			failures = append(failures, fmt.Errorf("volume %q at %q: %w", v.VolumeID, v.MountPath, err))
 		}
+	}
+
+	if len(failures) > 0 {
+		return errors.Join(failures...)
+	}
+	return nil
+}
+
+const (
+	// mountMaxAttempts is the total number of attempts per volume (one
+	// initial attempt + retries). Most failures are deterministic
+	// (bad token, deleted disk, wrong region) so retries don't help, but a
+	// short retry window absorbs transient network glitches without making
+	// users wait long when the failure is permanent.
+	mountMaxAttempts = 3
+	// mountRetryBackoff is the fixed sleep between retry attempts. We don't
+	// bother with exponential backoff because the per-attempt 5s readiness
+	// timeout already paces us, and the overall mount budget (30s in
+	// daemon main) caps the total wait.
+	mountRetryBackoff = 1 * time.Second
+)
+
+// mountOneWithRetry calls mountOne up to mountMaxAttempts times. Between
+// attempts it best-effort-cleans up any half-mounted state so the next
+// attempt isn't fooled by a stale mountpoint.
+func mountOneWithRetry(ctx context.Context, logger *slog.Logger, binary string, v Volume) error {
+	var lastErr error
+	for attempt := 1; attempt <= mountMaxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("aborting volume mount on attempt %d/%d: %w", attempt, mountMaxAttempts, err)
+		}
+
+		err := mountOne(ctx, logger, binary, v)
+		if err == nil {
+			if attempt > 1 {
+				logger.Info(
+					"in-container volume mounted on retry",
+					"volumeId", v.VolumeID,
+					"mountPath", v.MountPath,
+					"attempt", attempt,
+				)
+			}
+			return nil
+		}
+		lastErr = err
+
+		if attempt == mountMaxAttempts {
+			break
+		}
+
+		logger.Warn(
+			"in-container volume mount failed; will retry",
+			"volumeId", v.VolumeID,
+			"mountPath", v.MountPath,
+			"attempt", attempt,
+			"maxAttempts", mountMaxAttempts,
+			"error", err,
+		)
+
+		// A failed `archil mount` may have left the FUSE mountpoint
+		// half-registered. Attempt a best-effort unmount before retrying
+		// so mountOne's "already mounted" shortcut doesn't return a
+		// stale success on the next pass.
+		bestEffortUnmount(ctx, logger, binary, v.MountPath)
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("aborting volume mount during retry backoff: %w (last error: %v)", ctx.Err(), lastErr)
+		case <-time.After(mountRetryBackoff):
+		}
+	}
+	return lastErr
+}
+
+// bestEffortUnmount tries `archil unmount` first (which flushes pending
+// writes and tears down the FUSE server cleanly), and falls back to
+// `umount -l` if archil didn't manage. Any failure is logged at Warn and
+// otherwise ignored — the caller is about to retry the mount, and starting
+// from a clean state is preferred but not required.
+func bestEffortUnmount(ctx context.Context, logger *slog.Logger, binary string, mountPath string) {
+	if !isMountpoint(mountPath) {
+		return
+	}
+	logger.Debug("unmounting half-mounted path before retry", "mountPath", mountPath)
+
+	if err := exec.CommandContext(ctx, binary, "unmount", mountPath).Run(); err == nil {
+		return
+	}
+	if err := exec.CommandContext(ctx, "umount", "-l", mountPath).Run(); err != nil {
+		logger.Warn("best-effort unmount failed before retry", "mountPath", mountPath, "error", err)
 	}
 }
 
