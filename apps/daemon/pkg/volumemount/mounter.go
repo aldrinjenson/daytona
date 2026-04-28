@@ -16,6 +16,24 @@
 //	DAYTONA_INCONTAINER_VOLUMES         JSON-encoded []Volume (with per-volume
 //	                                    archilDisk / archilRegion / archilMountToken)
 //	DAYTONA_INCONTAINER_ARCHIL_BINARY   absolute path to the archil CLI binary
+//
+// Snapshot prerequisites:
+//
+// The runner provides the privileged primitives needed to mount FUSE inside
+// the sandbox (the `archil` binary bind-mounted RO, `/dev/fuse` attached
+// via --device, and a privileged container with CAP_SYS_ADMIN), but the
+// snapshot must supply the userspace pieces archil's libfuse build talks to:
+//
+//   - `fuse3` package (provides the `fusermount3` setuid helper). Some
+//     libfuse builds invoke fusermount3 even when running as root; missing
+//     it causes mounts to fail with "fusermount: executable file not found".
+//     preflightCheck warns if neither fusermount3 nor fusermount is in PATH,
+//     and MountAll appends an actionable hint to the surfaced error if the
+//     subsequent mount failure looks fuse-helper-related.
+//   - `ca-certificates` for TLS to the Archil control plane.
+//   - A glibc-compatible runtime (the archil binary is dynamically linked
+//     against glibc; Alpine snapshots without glibc compat will fail to
+//     exec the bind-mounted binary).
 package volumemount
 
 import (
@@ -27,6 +45,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -80,10 +99,26 @@ func MountAll(ctx context.Context, logger *slog.Logger) error {
 	if err := json.Unmarshal([]byte(raw), &volumes); err != nil {
 		return fmt.Errorf("parse in-container volume spec: %w", err)
 	}
+	if len(volumes) == 0 {
+		return nil
+	}
+
+	if err := preflightCheck(logger); err != nil {
+		return err
+	}
+	helperPresent := hasFuserHelper()
 
 	var failures []error
 	for _, v := range volumes {
 		if err := mountOneWithRetry(ctx, logger, binary, v); err != nil {
+			if !helperPresent && looksLikeFuseHelperError(err) {
+				err = fmt.Errorf(
+					"%w (hint: fusermount3/fusermount was not found in PATH at startup, "+
+						"and the failure looks fuse-helper-related; install the 'fuse3' "+
+						"package in your snapshot: apt-get install fuse3 / apk add fuse3 / dnf install fuse3)",
+					err,
+				)
+			}
 			logger.Error(
 				"failed to mount in-container volume after retries",
 				"volumeId", v.VolumeID,
@@ -277,6 +312,96 @@ func scrubEnv(logger *slog.Logger) {
 			logger.Warn("failed to unset in-container env var", "var", k, "error", err)
 		}
 	}
+}
+
+// preflightCheck validates that the container has the OS-level prerequisites
+// for `archil mount` to succeed.
+//
+// We split prerequisites into two tiers:
+//
+//   - Hard requirements (mount cannot work without these). Right now this is
+//     only `/dev/fuse`. The runner attaches it via `--device`, so a missing
+//     device almost always indicates a runner-level misconfiguration rather
+//     than a snapshot problem; we surface a distinct error so support can
+//     route it correctly.
+//
+//   - Soft requirements (warned about, not enforced). `fusermount3` /
+//     `fusermount` is the userspace setuid helper libfuse uses when it
+//     can't (or wasn't built to) call mount(2) directly. archil running as
+//     root with CAP_SYS_ADMIN may take the direct path and skip the helper
+//     entirely, so we don't want to hard-fail snapshots that work fine
+//     without it. If a mount later fails, MountAll uses helperPresent to
+//     decide whether to enrich the error with a "install fuse3" hint.
+//
+// Other less-obvious snapshot dependencies that archil needs at runtime
+// but that we deliberately do NOT check here:
+//
+//   - CA bundle for TLS to the Archil control plane (typically
+//     `ca-certificates`). archil's own error output is clear enough.
+//   - glibc-compatible libc (the archil binary is glibc-linked). Missing
+//     loader / wrong libc surfaces as ENOENT on the binary, which mountOne
+//     already wraps clearly.
+func preflightCheck(logger *slog.Logger) error {
+	if _, err := os.Stat("/dev/fuse"); err != nil {
+		return fmt.Errorf(
+			"/dev/fuse is missing inside the sandbox; the kernel FUSE device is "+
+				"required for in-container volume mounts. This usually indicates "+
+				"the runner did not attach /dev/fuse to the container - please "+
+				"contact support: %w", err,
+		)
+	}
+
+	if !hasFuserHelper() {
+		logger.Warn(
+			"fusermount3/fusermount not found in $PATH; some libfuse builds " +
+				"require it. If volume mounts fail with a 'fusermount: executable " +
+				"file not found' or similar message, install the 'fuse3' package " +
+				"in your snapshot (apt-get install fuse3 / apk add fuse3 / " +
+				"dnf install fuse3).",
+		)
+	}
+
+	return nil
+}
+
+// hasFuserHelper returns true if either fusermount3 (fuse3) or the older
+// fusermount (fuse 2.x) helper is reachable via $PATH. Both are acceptable
+// because libfuse will fall back to whichever is available.
+func hasFuserHelper() bool {
+	for _, name := range []string{"fusermount3", "fusermount"} {
+		if _, err := exec.LookPath(name); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeFuseHelperError reports whether the error chain looks like a
+// failure caused by a missing fusermount helper (rather than e.g. a bad
+// token, deleted disk, or network error). We use this together with
+// hasFuserHelper to decide whether to append the "install fuse3" hint -
+// avoiding misleading hints on unrelated failures like authentication
+// errors.
+//
+// We pattern-match on text rather than typed errors because the failure
+// surface is `archil mount`'s combined stdout+stderr, which we capture as
+// a wrapped error in mountOne.
+func looksLikeFuseHelperError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, needle := range []string{
+		"fusermount",
+		"fuse: device not found",
+		"fuse_kern_mount",
+		"executable file not found",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func isMountpoint(path string) bool {
