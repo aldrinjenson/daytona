@@ -45,6 +45,12 @@ export interface DtoVolumeDTO {
      */
     'mountPath'?: string;
     /**
+     * ReadOnly mounts the volume read-only for this sandbox. It is a per-mount attribute (not a per-volume one), so the same volume can be mounted RW in one sandbox and RO in another. The s3fuse path enforces it via the Docker bind mode (\":ro\"); the experimental path forwards it to `archil mount --read-only`.
+     * @type {boolean}
+     * @memberof DtoVolumeDTO
+     */
+    'readOnly'?: boolean;
+    /**
      * 
      * @type {string}
      * @memberof DtoVolumeDTO

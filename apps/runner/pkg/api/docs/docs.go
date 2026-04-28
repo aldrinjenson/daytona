@@ -1965,6 +1965,10 @@ const docTemplate = `{
                 "mountPath": {
                     "type": "string"
                 },
+                "readOnly": {
+                    "description": "ReadOnly mounts the volume read-only for this sandbox. It is a\nper-mount attribute (not a per-volume one), so the same volume can\nbe mounted RW in one sandbox and RO in another. The s3fuse path\nenforces it via the Docker bind mode (\":ro\"); the experimental\npath forwards it to ` + "`" + `archil mount --read-only` + "`" + `.",
+                    "type": "boolean"
+                },
                 "subpath": {
                     "type": "string"
                 },

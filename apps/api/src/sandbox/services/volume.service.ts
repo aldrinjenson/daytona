@@ -418,6 +418,15 @@ export class VolumeService {
         volumeId: ref.volumeId,
         mountPath: ref.mountPath,
         subpath: ref.subpath,
+        // Per-mount read-only flag. Honored by both backends:
+        //  - s3fuse: enforced via Docker bind mode (`:ro` on the bind spec)
+        //    so the host-side mount-s3 can stay shared and writable; only
+        //    the in-container view is read-only.
+        //  - experimental: passed as `--read-only` to `archil mount` inside
+        //    the sandbox. Archil RO mounts don't take a write delegation,
+        //    so multiple sandboxes can hold concurrent RO mounts of the
+        //    same disk while a separate RW mount is active elsewhere.
+        readOnly: ref.readOnly,
       }
 
       if (backend === VOLUME_BACKEND_EXPERIMENTAL) {

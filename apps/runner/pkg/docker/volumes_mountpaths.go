@@ -68,8 +68,21 @@ func (d *DockerClient) getVolumesMountPathBinds(ctx context.Context, volumes []d
 			}
 		}
 
-		d.logger.DebugContext(ctx, "binding volume subpath", "volumeId", volumeIdPrefixed, "subpath", subpathStr, "mountPath", vol.MountPath)
-		volumeMountPathBinds = append(volumeMountPathBinds, fmt.Sprintf("%s/:%s/", bindSource, vol.MountPath))
+		// Per-mount read-only support. The host-side mount-s3 stays
+		// writable (it's shared across every sandbox referencing this
+		// volume); we enforce read-only at the bind layer instead, so
+		// each sandbox gets its own RW/RO view independent of any other.
+		bindMode := ""
+		if vol.ReadOnly {
+			bindMode = ":ro"
+		}
+		d.logger.DebugContext(ctx, "binding volume subpath",
+			"volumeId", volumeIdPrefixed,
+			"subpath", subpathStr,
+			"mountPath", vol.MountPath,
+			"readOnly", vol.ReadOnly,
+		)
+		volumeMountPathBinds = append(volumeMountPathBinds, fmt.Sprintf("%s/:%s/%s", bindSource, vol.MountPath, bindMode))
 	}
 
 	return volumeMountPathBinds, nil

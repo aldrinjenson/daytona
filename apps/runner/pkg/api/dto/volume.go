@@ -15,6 +15,13 @@ type VolumeDTO struct {
 	MountPath string  `json:"mountPath"`
 	Subpath   *string `json:"subpath,omitempty"`
 
+	// ReadOnly mounts the volume read-only for this sandbox. It is a
+	// per-mount attribute (not a per-volume one), so the same volume can
+	// be mounted RW in one sandbox and RO in another. The s3fuse path
+	// enforces it via the Docker bind mode (":ro"); the experimental
+	// path forwards it to `archil mount --read-only`.
+	ReadOnly bool `json:"readOnly,omitempty"`
+
 	// ArchilDisk identifies the Archil disk to mount, in the form
 	// "owner/disk-name" or "dsk-XXXXXXXXXXXXXXXX". Required when the
 	// sandbox uses the experimental in-container backend.

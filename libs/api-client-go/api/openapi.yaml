@@ -10654,6 +10654,7 @@ components:
         mountPath: /data
         volumeId: volume123
         subpath: users/alice
+        readOnly: false
       properties:
         volumeId:
           description: The ID of the volume
@@ -10669,6 +10670,14 @@ components:
             \ is mounted."
           example: users/alice
           type: string
+        readOnly:
+          default: false
+          description: "Mount the volume read-only inside this sandbox. The volume\
+            \ itself is unchanged; this is a per-mount attribute, so the same volume\
+            \ can be mounted read-write in one sandbox and read-only in another. Defaults\
+            \ to false."
+          example: false
+          type: boolean
       required:
       - mountPath
       - volumeId
@@ -10733,9 +10742,11 @@ components:
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         cpu: 2
         recoverable: true
         env:
@@ -10951,9 +10962,11 @@ components:
           - mountPath: /data
             volumeId: volume123
             subpath: users/alice
+            readOnly: false
           - mountPath: /data
             volumeId: volume123
             subpath: users/alice
+            readOnly: false
           cpu: 2
           recoverable: true
           env:
@@ -10992,9 +11005,11 @@ components:
           - mountPath: /data
             volumeId: volume123
             subpath: users/alice
+            readOnly: false
           - mountPath: /data
             volumeId: volume123
             subpath: users/alice
+            readOnly: false
           cpu: 2
           recoverable: true
           env:
@@ -11059,9 +11074,11 @@ components:
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         cpu: 2
         env:
           NODE_ENV: production
@@ -13739,9 +13756,11 @@ components:
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         cpu: 2
         recoverable: true
         env:
@@ -13961,9 +13980,11 @@ components:
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         - mountPath: /data
           volumeId: volume123
           subpath: users/alice
+          readOnly: false
         cpu: 2
         env:
           NODE_ENV: production

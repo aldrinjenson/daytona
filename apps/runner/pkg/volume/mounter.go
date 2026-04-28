@@ -37,6 +37,12 @@ type Volume struct {
 	MountPath string `json:"mountPath"`
 	Subpath   string `json:"subpath,omitempty"`
 
+	// ReadOnly mounts the volume read-only inside this sandbox. Honored
+	// by both backends; see Mounter implementations for how the flag is
+	// applied (Docker bind mode for s3fuse, `archil mount --read-only`
+	// for the experimental backend).
+	ReadOnly bool `json:"readOnly,omitempty"`
+
 	ArchilDisk       string `json:"archilDisk,omitempty"`
 	ArchilRegion     string `json:"archilRegion,omitempty"`
 	ArchilMountToken string `json:"archilMountToken,omitempty"`

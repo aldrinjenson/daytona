@@ -40,6 +40,7 @@ type Volume struct {
 	VolumeID         string `json:"volumeId"`
 	MountPath        string `json:"mountPath"`
 	Subpath          string `json:"subpath,omitempty"`
+	ReadOnly         bool   `json:"readOnly,omitempty"`
 	ArchilDisk       string `json:"archilDisk,omitempty"`
 	ArchilRegion     string `json:"archilRegion,omitempty"`
 	ArchilMountToken string `json:"archilMountToken,omitempty"`
@@ -135,6 +136,13 @@ func mountOne(ctx context.Context, logger *slog.Logger, binary string, v Volume)
 		v.MountPath,
 		"--region", v.ArchilRegion,
 	}
+	if v.ReadOnly {
+		// `--read-only` was added in archil client v0.5.0. Read-only
+		// mounts don't take a write delegation, so multiple sandboxes
+		// can hold concurrent RO views of the same disk while a separate
+		// RW mount is active elsewhere.
+		args = append(args, "--read-only")
+	}
 
 	cmd := exec.CommandContext(ctx, binary, args...)
 	// Pass the token via env, not argv: argv is visible in /proc/<pid>/cmdline
@@ -149,6 +157,7 @@ func mountOne(ctx context.Context, logger *slog.Logger, binary string, v Volume)
 		"archilDisk", v.ArchilDisk,
 		"archilRegion", v.ArchilRegion,
 		"subpath", v.Subpath,
+		"readOnly", v.ReadOnly,
 	)
 
 	out, err := cmd.CombinedOutput()

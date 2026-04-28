@@ -48,6 +48,7 @@ func volumesToMounterSpec(in []dto.VolumeDTO) []volume.Volume {
 			VolumeID:         v.VolumeId,
 			MountPath:        v.MountPath,
 			Subpath:          subpath,
+			ReadOnly:         v.ReadOnly,
 			ArchilDisk:       v.ArchilDisk,
 			ArchilRegion:     v.ArchilRegion,
 			ArchilMountToken: v.ArchilMountToken,
