@@ -83,7 +83,7 @@ public class FileSystem {
      * @throws io.daytona.sdk.exception.DaytonaException if the file does not exist or access is denied
      */
     public InputStream downloadFileStream(String remotePath) throws io.daytona.sdk.exception.DaytonaException {
-        return downloadFileStream(remotePath, FileTransfer.DEFAULT_DOWNLOAD_STREAM_TIMEOUT_SECONDS);
+        return downloadFileStream(remotePath, new DownloadStreamOptions());
     }
 
     /**
@@ -98,7 +98,19 @@ public class FileSystem {
      * @throws io.daytona.sdk.exception.DaytonaException if the file does not exist or access is denied
      */
     public InputStream downloadFileStream(String remotePath, int timeoutSeconds) throws io.daytona.sdk.exception.DaytonaException {
-        return FileTransfer.streamDownload(fileSystemApi, remotePath, timeoutSeconds);
+        return downloadFileStream(remotePath, new DownloadStreamOptions().setTimeout(timeoutSeconds));
+    }
+
+    /**
+     * Downloads a single file from the Sandbox as a stream with configurable options.
+     *
+     * @param remotePath source file path in the Sandbox
+     * @param options download options including timeout and progress callback
+     * @return an InputStream streaming the file content
+     * @throws io.daytona.sdk.exception.DaytonaException if download fails
+     */
+    public InputStream downloadFileStream(String remotePath, DownloadStreamOptions options) throws io.daytona.sdk.exception.DaytonaException {
+        return FileTransfer.streamDownload(fileSystemApi, remotePath, options);
     }
 
     /**

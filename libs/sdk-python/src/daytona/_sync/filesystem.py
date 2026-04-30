@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import io
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 from typing import overload
 
@@ -170,7 +170,12 @@ class FileSystem:
 
     @intercept_errors(message_prefix="Failed to download file: ")
     @with_instrumentation()
-    def download_file_stream(self, remote_path: str, timeout: int = 30 * 60) -> Iterator[bytes]:
+    def download_file_stream(
+        self,
+        remote_path: str,
+        timeout: int = 30 * 60,
+        on_progress: Callable[[int], None] | None = None,
+    ) -> Iterator[bytes]:
         """Downloads a single file from the Sandbox as a stream without buffering the entire file
         into memory. Returns an iterator that yields file content in chunks, which can be piped
         directly to an HTTP response, written to a file incrementally, or processed on the fly.
@@ -180,6 +185,8 @@ class FileSystem:
                 on the sandbox working directory.
             timeout (int): Timeout for the download operation in seconds. 0 means no timeout.
                 Default is 30 minutes.
+            on_progress (Callable[[int], None] | None): Optional callback invoked with cumulative
+                bytes received as the download progresses. Default is None.
 
         Returns:
             Iterator[bytes]: An iterator yielding chunks of file content as bytes.
@@ -214,6 +221,7 @@ class FileSystem:
             error_text: str | None = None
             error_details: FileDownloadErrorDetails | None = None
             received_file_data = False
+            bytes_received = 0
 
             def on_part_begin() -> None:
                 part_headers.clear()
@@ -294,16 +302,24 @@ class FileSystem:
                         _ = parser.write(chunk)
                         if file_chunks:
                             emitted_chunks = file_chunks.copy()
-                            file_chunks.clear()
                             received_file_data = True
-                            yield from emitted_chunks
+                            for file_chunk in emitted_chunks:
+                                bytes_received += len(file_chunk)
+                                if on_progress:
+                                    on_progress(bytes_received)
+                                yield file_chunk
+                            file_chunks.clear()
 
                     parser.finalize()
                     if file_chunks:
                         emitted_chunks = file_chunks.copy()
-                        file_chunks.clear()
                         received_file_data = True
-                        yield from emitted_chunks
+                        for file_chunk in emitted_chunks:
+                            bytes_received += len(file_chunk)
+                            if on_progress:
+                                on_progress(bytes_received)
+                            yield file_chunk
+                        file_chunks.clear()
 
             raise_if_stream_error(remote_path, error_text, error_details, received_file_data)
 

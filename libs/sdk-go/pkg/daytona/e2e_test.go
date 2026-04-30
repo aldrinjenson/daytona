@@ -230,6 +230,20 @@ func TestE2E(t *testing.T) {
 		assert.Equal(t, "hello world", string(data))
 	})
 
+	t.Run("FileSystem/DownloadFileStreamProgress", func(t *testing.T) {
+		var lastBytes int64
+		stream, err := sandbox.FileSystem.DownloadFileStream(ctx, helloPath, WithProgress(func(n int64) {
+			lastBytes = n
+		}))
+		require.NoError(t, err)
+		defer stream.Close()
+
+		data, err := io.ReadAll(stream)
+		require.NoError(t, err)
+		assert.Equal(t, "hello world", string(data))
+		assert.Equal(t, int64(len(data)), lastBytes)
+	})
+
 	t.Run("FileSystem/FindFiles", func(t *testing.T) {
 		findResult, findErr := sandbox.FileSystem.FindFiles(ctx, textDir, "hello")
 		require.NoError(t, findErr)

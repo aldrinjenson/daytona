@@ -19,7 +19,7 @@ from daytona import (
     FileUpload,
     Image,
     PtySize,
-    Resources,
+    Sandbox,
     SessionExecuteRequest,
 )
 from daytona.common.errors import DaytonaError
@@ -233,6 +233,20 @@ def test_download_file_stream_returns_exact_content(sandbox):
     content = b"".join(sandbox.fs.download_file_stream(path))
 
     assert content == expected
+
+
+def test_download_file_stream_on_progress(sandbox: Sandbox):
+    expected = ("progress-check-" + uuid.uuid4().hex).encode("utf-8") * 512
+    path = f"{FS_TEST_DIR}/streamed-progress.txt"
+    sandbox.fs.upload_file(expected, path)
+    progress_updates: list[int] = []
+
+    content = b"".join(sandbox.fs.download_file_stream(path, on_progress=progress_updates.append))
+
+    assert content == expected
+    assert progress_updates
+    assert progress_updates[-1] == len(expected)
+    assert progress_updates == sorted(progress_updates)
 
 
 def test_download_file_stream_nonexistent_file_raises(sandbox):

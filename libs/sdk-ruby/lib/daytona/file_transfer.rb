@@ -141,9 +141,20 @@ module Daytona
       match.captures.compact.first
     end
 
-    def self.stream_download(api_client:, remote_path:, timeout:, &) # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    def self.stream_download(api_client:, remote_path:, timeout:, on_progress: nil, &block)
       config = api_client.config
-      parser = MultipartDownloadStreamParser.new(&)
+      bytes_received = 0
+      wrapped_block = if on_progress
+                        proc do |chunk|
+                          bytes_received += chunk.bytesize
+                          on_progress.call(bytes_received)
+                          block.call(chunk)
+                        end
+                      else
+                        block
+                      end
+      parser = MultipartDownloadStreamParser.new(&wrapped_block)
       response = nil
 
       request = Typhoeus::Request.new(
@@ -180,5 +191,6 @@ module Daytona
       raise Sdk::Error, parser.error_message if parser.error_message
       raise Sdk::Error, "HTTP #{response.code}" if response && !response.success?
     end
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
   end
 end

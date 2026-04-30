@@ -187,6 +187,17 @@ RSpec.describe Daytona::FileSystem do
       expect(enumerator.to_a.join).to eq('enumerated content')
     end
 
+    it 'calls on_progress with cumulative file bytes' do
+      body = multipart_response([{ name: 'file', filename: 'remote.txt', body: 'hello world' }])
+      stub_streaming_request(chunks: [body])
+
+      progress_calls = []
+      fs.download_file_stream('/remote.txt', on_progress: ->(bytes) { progress_calls << bytes }) { |_chunk| nil }
+
+      expect(progress_calls).not_to be_empty
+      expect(progress_calls.last).to eq('hello world'.bytesize)
+    end
+
     it 'raises error when file not found' do
       body = multipart_response([
                                   { name: 'error', content_type: 'application/json',

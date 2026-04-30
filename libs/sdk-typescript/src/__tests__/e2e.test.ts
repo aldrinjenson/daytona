@@ -227,6 +227,33 @@ describe('TypeScript SDK E2E (real Daytona API)', () => {
       await expect(sandbox.fs.downloadFileStream('fs-test/does-not-exist.txt')).rejects.toThrow()
     })
 
+    test('stream download with onProgress tracks bytes', async () => {
+      const content = 'progress tracking content'
+      await sandbox.fs.uploadFile(Buffer.from(content), 'fs-test/progress-test.txt')
+
+      let lastBytes = 0
+      const stream = await sandbox.fs.downloadFileStream('fs-test/progress-test.txt', {
+        onProgress: (bytes) => {
+          lastBytes = bytes
+        },
+      })
+      const chunks: Buffer[] = []
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+        stream.on('end', resolve)
+        stream.on('error', reject)
+      })
+
+      expect(Buffer.concat(chunks).toString()).toBe(content)
+      expect(lastBytes).toBe(content.length)
+    })
+
+    test('stream download with aborted signal rejects', async () => {
+      const controller = new AbortController()
+      controller.abort()
+      await expect(sandbox.fs.downloadFileStream('fs-test/stream-test.txt', { signal: controller.signal })).rejects.toThrow()
+    })
+
     test('downloadFiles batch returns multiple files', async () => {
       console.log('[E2E][FS] Batch downloading files...')
       const results = await sandbox.fs.downloadFiles([{ source: 'fs-test/a.txt' }, { source: 'fs-test/b.txt' }])

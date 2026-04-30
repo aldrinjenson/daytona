@@ -241,6 +241,21 @@ func (f *FileSystemService) DownloadFile(ctx context.Context, remotePath string,
 	})
 }
 
+// DownloadStreamOption configures the behavior of DownloadFileStream.
+type DownloadStreamOption func(*downloadStreamConfig)
+
+type downloadStreamConfig struct {
+	onProgress func(bytesRead int64)
+}
+
+// WithProgress returns an option that enables progress tracking for streaming downloads.
+// The callback receives the cumulative number of bytes read so far.
+func WithProgress(fn func(bytesRead int64)) DownloadStreamOption {
+	return func(c *downloadStreamConfig) {
+		c.onProgress = fn
+	}
+}
+
 // DownloadFileStream downloads a single file from the sandbox as a stream without
 // buffering the entire file into memory. The returned [io.ReadCloser] can be piped
 // directly to an HTTP response, written to a file, or processed on the fly.
@@ -272,9 +287,14 @@ func (f *FileSystemService) DownloadFile(ctx context.Context, remotePath string,
 //	out, _ := os.Create("local-copy.bin")
 //	defer out.Close()
 //	io.Copy(out, stream)
-func (f *FileSystemService) DownloadFileStream(ctx context.Context, remotePath string) (io.ReadCloser, error) {
+func (f *FileSystemService) DownloadFileStream(ctx context.Context, remotePath string, opts ...DownloadStreamOption) (io.ReadCloser, error) {
+	cfg := &downloadStreamConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	return withInstrumentation(ctx, f.otel, "FileSystem", "DownloadFileStream", func(ctx context.Context) (io.ReadCloser, error) {
-		return streamDownloadFile(f.toolboxClient.GetConfig(), remotePath, ctx)
+		return streamDownloadFile(f.toolboxClient.GetConfig(), remotePath, ctx, cfg.onProgress)
 	})
 }
 

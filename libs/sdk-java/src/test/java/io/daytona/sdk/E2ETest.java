@@ -266,6 +266,21 @@ class E2ETest {
     }
 
     @Test
+    @Order(16)
+    void downloadFileStreamWithProgress() throws Exception {
+        sandbox.getFs().uploadFile("progress test".getBytes(StandardCharsets.UTF_8), fsDir + "/progress.txt");
+        java.util.concurrent.atomic.AtomicLong lastBytes = new java.util.concurrent.atomic.AtomicLong();
+
+        try (InputStream stream = sandbox.getFs().downloadFileStream(
+                fsDir + "/progress.txt",
+                new DownloadStreamOptions().setOnProgress(lastBytes::set))) {
+            byte[] content = stream.readAllBytes();
+            assertThat(new String(content, StandardCharsets.UTF_8)).isEqualTo("progress test");
+            assertThat(lastBytes.get()).isEqualTo(content.length);
+        }
+    }
+
+    @Test
     @Order(7)
     void processExecutionCoversCommandsEnvAndFailures() {
         ExecuteResponse echo = sandbox.getProcess().executeCommand("echo hello");

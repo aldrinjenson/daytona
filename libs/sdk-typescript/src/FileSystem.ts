@@ -123,6 +123,23 @@ export interface DownloadMetadata {
   result?: Buffer | string | Uint8Array
 }
 
+/**
+ * Options for streaming file downloads.
+ *
+ * @interface
+ * @property {number} [timeout] - Timeout in seconds. 0 means no timeout. Default is 30 minutes.
+ * @property {AbortSignal} [signal] - AbortSignal for cancelling the download.
+ * @property {(bytes: number) => void} [onProgress] - Callback invoked with cumulative bytes received.
+ */
+export type DownloadStreamOptions = {
+  /** Callback invoked with cumulative bytes received as the download progresses. */
+  onProgress?: (bytes: number) => void
+  /** AbortSignal for cancelling the download. */
+  signal?: AbortSignal
+  /** Timeout in seconds. 0 means no timeout. Default is 30 minutes. */
+  timeout?: number
+}
+
 function createFileDownloadError(error: string, errorDetails?: FileDownloadErrorDetails): DaytonaError {
   if (!errorDetails) {
     return new DaytonaError(error)
@@ -241,7 +258,9 @@ export class FileSystem {
    *
    * @param {string} remotePath - Path to the file in the Sandbox. Relative paths are
    *   resolved based on the sandbox working directory.
-   * @param {number} [timeout] - Timeout in seconds. 0 means no timeout. Default is 30 minutes.
+   * @param {number | DownloadStreamOptions} [timeoutOrOptions] - Timeout in seconds, or an options
+   *   object with timeout, AbortSignal for cancellation, and/or onProgress callback.
+   *   Default timeout is 30 minutes.
    * @returns {Promise<Readable>} A Node.js Readable stream of the file content.
    *
    * @example
@@ -250,13 +269,24 @@ export class FileSystem {
    * stream.pipe(res);
    *
    * @example
-   * // Pipe to a local file
-   * import { createWriteStream } from 'fs';
-   * const stream = await sandbox.fs.downloadFileStream('outputs/data.csv');
-   * stream.pipe(createWriteStream('local-data.csv'));
+   * // Download with progress tracking and cancellation
+   * const controller = new AbortController();
+   * const stream = await sandbox.fs.downloadFileStream('outputs/large-file.bin', {
+   *   signal: controller.signal,
+   *   onProgress: (bytes) => console.log(`${bytes} bytes received`),
+   * });
+   * stream.pipe(createWriteStream('local-file.bin'));
    */
+  public async downloadFileStream(remotePath: string, timeout?: number): Promise<Readable>
+  public async downloadFileStream(remotePath: string, options?: DownloadStreamOptions): Promise<Readable>
   @WithInstrumentation()
-  public async downloadFileStream(remotePath: string, timeout: number = 30 * 60): Promise<Readable> {
+  public async downloadFileStream(
+    remotePath: string,
+    timeoutOrOptions?: number | DownloadStreamOptions,
+  ): Promise<Readable> {
+    const options: DownloadStreamOptions =
+      typeof timeoutOrOptions === 'number' ? { timeout: timeoutOrOptions } : (timeoutOrOptions ?? {})
+    const timeout = options.timeout ?? 30 * 60
     const isNonStreamingRuntime = RUNTIME === Runtime.BROWSER || RUNTIME === Runtime.SERVERLESS
     if (isNonStreamingRuntime) {
       throw new DaytonaError(
@@ -269,6 +299,7 @@ export class FileSystem {
       {
         responseType: 'stream',
         timeout: timeout * 1000,
+        signal: options.signal,
       },
     )
 
@@ -284,7 +315,21 @@ export class FileSystem {
         response.headers as Record<string, string>,
         metadataMap,
         (_source, fileStream) => {
-          resolvedStream = fileStream as Readable
+          if (options.onProgress) {
+            const { Transform } = require('stream') as typeof import('stream')
+            let bytesReceived = 0
+            const progress = new Transform({
+              transform(chunk, _encoding, callback) {
+                bytesReceived += chunk.length
+                options.onProgress!(bytesReceived)
+                callback(null, chunk)
+              },
+            })
+            fileStream.pipe(progress)
+            resolvedStream = progress
+          } else {
+            resolvedStream = fileStream as Readable
+          }
           resolve(resolvedStream)
         },
       )

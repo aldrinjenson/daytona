@@ -223,6 +223,19 @@ RSpec.describe 'Daytona SDK E2E', :e2e do
       expect(chunks.join).to eq('stream test content')
     end
 
+    it 'calls on_progress during stream download' do
+      @sandbox.fs.upload_file('progress test content'.b, "#{@fs_dir}/progress.txt")
+
+      progress_calls = []
+      @sandbox.fs.download_file_stream(
+        "#{@fs_dir}/progress.txt",
+        on_progress: ->(bytes) { progress_calls << bytes }
+      ) { |_chunk| nil }
+
+      expect(progress_calls).not_to be_empty
+      expect(progress_calls.last).to eq('progress test content'.bytesize)
+    end
+
     it 'finds text content in files' do
       matches = @sandbox.fs.find_files(@fs_dir, 'hello')
       expect(matches).not_to be_nil

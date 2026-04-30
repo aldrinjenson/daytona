@@ -15,6 +15,7 @@ export type {
 export { FileSystem } from './FileSystem'
 export type {
   DownloadMetadata,
+  DownloadStreamOptions,
   FileDownloadErrorDetails,
   FileDownloadRequest,
   FileDownloadResponse,

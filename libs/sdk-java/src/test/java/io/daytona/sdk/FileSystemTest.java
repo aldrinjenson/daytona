@@ -32,6 +32,7 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -162,6 +163,42 @@ class FileSystemTest {
             assertThat(request.getHeader("Accept")).isEqualTo("multipart/form-data");
             assertThat(request.getHeader("Content-Type")).startsWith("application/json");
             assertThat(request.getBody().readUtf8()).isEqualTo("{\"paths\":[\"/remote.txt\"]}");
+        }
+    }
+
+    @Test
+    void downloadFileStreamWithProgressCallsCallback() throws Exception {
+        byte[] content = "hello progress".getBytes(StandardCharsets.UTF_8);
+
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "multipart/form-data; boundary=DAYTONA-FILE-BOUNDARY")
+                    .setBody("--DAYTONA-FILE-BOUNDARY\r\n"
+                            + "Content-Disposition: form-data; name=\"file\"; filename=\"remote.txt\"\r\n"
+                            + "Content-Type: application/octet-stream\r\n"
+                            + "\r\n"
+                            + new String(content, StandardCharsets.UTF_8) + "\r\n"
+                            + "--DAYTONA-FILE-BOUNDARY--\r\n"));
+
+            io.daytona.toolbox.client.ApiClient apiClient = new io.daytona.toolbox.client.ApiClient();
+            apiClient.setBasePath(server.url("/").toString());
+            FileSystem streamingFileSystem = new FileSystem(new FileSystemApi(apiClient));
+            List<Long> progressUpdates = new ArrayList<Long>();
+
+            try (InputStream stream = streamingFileSystem.downloadFileStream(
+                    "/remote.txt",
+                    new DownloadStreamOptions().setOnProgress(progressUpdates::add))) {
+                byte[] buffer = new byte[4];
+                int read;
+                StringBuilder received = new StringBuilder();
+                while ((read = stream.read(buffer)) != -1) {
+                    received.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
+                }
+
+                assertThat(received.toString()).isEqualTo(new String(content, StandardCharsets.UTF_8));
+            }
+
+            assertThat(progressUpdates).isEqualTo(Arrays.asList(4L, 8L, 12L, (long) content.length));
         }
     }
 

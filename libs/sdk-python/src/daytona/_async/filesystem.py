@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import io
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import ExitStack
-from typing import Any, cast, overload
+from typing import cast, overload
 
 import aiofiles
 import aiofiles.os
@@ -174,7 +174,12 @@ class AsyncFileSystem:
 
     @intercept_errors(message_prefix="Failed to download file: ")
     @with_instrumentation()
-    async def download_file_stream(self, remote_path: str, timeout: int = 30 * 60) -> AsyncIterator[bytes]:
+    async def download_file_stream(
+        self,
+        remote_path: str,
+        timeout: int = 30 * 60,
+        on_progress: Callable[[int], None] | None = None,
+    ) -> AsyncIterator[bytes]:
         """Downloads a single file from the Sandbox as a stream without buffering the entire file
         into memory. Returns an async iterator that yields file content in chunks, which can be piped
         directly to an HTTP response, written to a file incrementally, or processed on the fly.
@@ -184,6 +189,8 @@ class AsyncFileSystem:
                 on the sandbox working directory.
             timeout (int): Timeout for the download operation in seconds. 0 means no timeout.
                 Default is 30 minutes.
+            on_progress (Callable[[int], None] | None): Optional callback invoked with cumulative
+                bytes received as the download progresses. Default is None.
 
         Returns:
             AsyncIterator[bytes]: An async iterator yielding chunks of file content as bytes.
@@ -214,11 +221,12 @@ class AsyncFileSystem:
             header_value = bytearray()
             pending_headers: list[tuple[str, str]] = []
             error_buffer = bytearray()
-            events: list[tuple[str, Any]] = []
+            events: list[tuple[str, object]] = []
             file_chunks: list[bytes] = []
             error_text: str | None = None
             error_details: FileDownloadErrorDetails | None = None
             received_file_data = False
+            bytes_received = 0
 
             def on_part_begin() -> None:
                 pending_headers.clear()
@@ -321,20 +329,26 @@ class AsyncFileSystem:
                         await process_events()
                         if file_chunks:
                             emitted_chunks = file_chunks.copy()
-                            file_chunks.clear()
                             received_file_data = True
                             for file_chunk in emitted_chunks:
+                                bytes_received += len(file_chunk)
+                                if on_progress:
+                                    on_progress(bytes_received)
                                 yield file_chunk
+                            file_chunks.clear()
 
                     events.clear()
                     parser.finalize()
                     await process_events()
                     if file_chunks:
                         emitted_chunks = file_chunks.copy()
-                        file_chunks.clear()
                         received_file_data = True
                         for file_chunk in emitted_chunks:
+                            bytes_received += len(file_chunk)
+                            if on_progress:
+                                on_progress(bytes_received)
                             yield file_chunk
+                        file_chunks.clear()
 
             raise_if_stream_error(remote_path, error_text, error_details, received_file_data)
 
@@ -419,7 +433,7 @@ class AsyncFileSystem:
                     header_value = bytearray()
                     pending_headers: list[tuple[str, str]] = []
                     error_buffer = bytearray()
-                    events: list[tuple[str, Any]] = []
+                    events: list[tuple[str, object]] = []
 
                     def on_part_begin() -> None:
                         # Keep callback-owned header state local and communicate via immutable

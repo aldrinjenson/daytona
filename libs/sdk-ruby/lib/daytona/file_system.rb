@@ -162,6 +162,8 @@ module Daytona
     #   based on the sandbox working directory.
     # @param timeout [Integer] Timeout for the download operation in seconds. 0 means no timeout.
     #   Default is 30 minutes.
+    # @param on_progress [Proc, nil] Optional callback invoked with cumulative bytes received
+    #   as the download progresses. Receives a single Integer argument.
     # @yield [chunk] Yields each chunk of file content as it arrives
     # @yieldparam chunk [String] A binary string chunk of file content
     # @return [Enumerator, nil] An Enumerator yielding chunks if no block given, nil otherwise
@@ -175,11 +177,11 @@ module Daytona
     # @example Collect chunks with an Enumerator
     #   content = sandbox.fs.download_file_stream("workspace/data.json").reduce(:+)
     #   puts content
-    def download_file_stream(remote_path, timeout: 30 * 60, &)
-      return enum_for(__method__, remote_path, timeout:) unless block_given?
+    def download_file_stream(remote_path, timeout: 30 * 60, on_progress: nil, &)
+      return enum_for(__method__, remote_path, timeout:, on_progress:) unless block_given?
 
       FileTransfer.stream_download(api_client: toolbox_api.api_client, remote_path: remote_path,
-                                   timeout: timeout, &)
+                                   timeout: timeout, on_progress: on_progress, &)
       nil
     rescue StandardError => e
       raise Sdk::Error, "Failed to download file: #{e.message}"

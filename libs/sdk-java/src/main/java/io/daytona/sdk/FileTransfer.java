@@ -16,6 +16,7 @@ import okhttp3.ResponseBody;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,7 +38,8 @@ final class FileTransfer {
     private FileTransfer() {
     }
 
-    static InputStream streamDownload(FileSystemApi fileSystemApi, String remotePath, int timeoutSeconds) throws io.daytona.sdk.exception.DaytonaException {
+    static InputStream streamDownload(FileSystemApi fileSystemApi, String remotePath, DownloadStreamOptions options) throws io.daytona.sdk.exception.DaytonaException {
+        int timeoutSeconds = options.getTimeoutSeconds();
         if (timeoutSeconds < 0) {
             throw new io.daytona.sdk.exception.DaytonaException("Timeout must be non-negative");
         }
@@ -59,7 +62,11 @@ final class FileTransfer {
         try {
             Request request = buildDownloadFileStreamRequest(apiClient, remotePath);
             response = streamingClient.newCall(request).execute();
-            return extractDownloadFileStream(response);
+            InputStream result = extractDownloadFileStream(response);
+            if (options.getOnProgress() != null) {
+                result = new ProgressInputStream(result, options.getOnProgress());
+            }
+            return result;
         } catch (IOException e) {
             if (response != null) {
                 response.close();
@@ -236,6 +243,36 @@ final class FileTransfer {
         }
 
         return ExceptionMapper.map(statusCode, responseBody);
+    }
+
+    private static final class ProgressInputStream extends FilterInputStream {
+        private final Consumer<Long> onProgress;
+        private long total;
+
+        private ProgressInputStream(InputStream in, Consumer<Long> onProgress) {
+            super(in);
+            this.onProgress = onProgress;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int b = super.read();
+            if (b != -1) {
+                total++;
+                onProgress.accept(total);
+            }
+            return b;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            int n = super.read(b, off, len);
+            if (n > 0) {
+                total += n;
+                onProgress.accept(total);
+            }
+            return n;
+        }
     }
 
     private static final class MultipartPartInputStream extends InputStream {

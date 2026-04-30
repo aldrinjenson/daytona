@@ -179,6 +179,46 @@ func TestDownloadFileStream(t *testing.T) {
 	assert.Equal(t, "streamed file content", string(data))
 }
 
+func TestDownloadFileStreamProgress(t *testing.T) {
+	remotePath := "/home/user/file.txt"
+	content := "streamed file content"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mw := multipart.NewWriter(w)
+		w.Header().Set("Content-Type", mw.FormDataContentType())
+		part, err := mw.CreateFormFile("file", remotePath)
+		require.NoError(t, err)
+		_, err = part.Write([]byte(content))
+		require.NoError(t, err)
+		require.NoError(t, mw.Close())
+	}))
+	defer server.Close()
+
+	fs := NewFileSystemService(createTestToolboxClient(server), nil)
+
+	var progress []int64
+	stream, err := fs.DownloadFileStream(context.Background(), remotePath, WithProgress(func(bytesRead int64) {
+		progress = append(progress, bytesRead)
+	}))
+	require.NoError(t, err)
+	defer stream.Close()
+
+	buf := make([]byte, 5)
+	var data []byte
+	for {
+		n, readErr := stream.Read(buf)
+		if n > 0 {
+			data = append(data, buf[:n]...)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		require.NoError(t, readErr)
+	}
+
+	assert.Equal(t, content, string(data))
+	assert.Equal(t, []int64{5, 10, 15, 20, int64(len(content))}, progress)
+}
+
 func TestDownloadFileStreamError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mw := multipart.NewWriter(w)

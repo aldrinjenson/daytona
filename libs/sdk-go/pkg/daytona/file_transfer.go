@@ -23,8 +23,23 @@ type downloadStreamCloser struct {
 	response   *http.Response
 }
 
+type progressReader struct {
+	inner      io.Reader
+	onProgress func(int64)
+	total      int64
+}
+
 func (d *downloadStreamCloser) Read(p []byte) (int, error) {
 	return d.partReader.Read(p)
+}
+
+func (p *progressReader) Read(buf []byte) (int, error) {
+	n, err := p.inner.Read(buf)
+	if n > 0 {
+		p.total += int64(n)
+		p.onProgress(p.total)
+	}
+	return n, err
 }
 
 func (d *downloadStreamCloser) Close() error {
@@ -34,7 +49,7 @@ func (d *downloadStreamCloser) Close() error {
 	return d.response.Body.Close()
 }
 
-func streamDownloadFile(cfg *toolbox.Configuration, remotePath string, ctx context.Context) (io.ReadCloser, error) {
+func streamDownloadFile(cfg *toolbox.Configuration, remotePath string, ctx context.Context, onProgress func(int64)) (io.ReadCloser, error) {
 	if len(cfg.Servers) == 0 {
 		return nil, errors.NewDaytonaError("Toolbox client is not configured", 0, nil)
 	}
@@ -103,7 +118,11 @@ func streamDownloadFile(cfg *toolbox.Configuration, remotePath string, ctx conte
 
 		switch part.FormName() {
 		case "file":
-			return &downloadStreamCloser{partReader: part, response: resp}, nil
+			var reader io.Reader = part
+			if onProgress != nil {
+				reader = &progressReader{inner: part, onProgress: onProgress}
+			}
+			return &downloadStreamCloser{partReader: reader, response: resp}, nil
 		case "error":
 			body, readErr := io.ReadAll(part)
 			_ = resp.Body.Close()
