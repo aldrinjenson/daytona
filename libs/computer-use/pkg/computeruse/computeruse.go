@@ -48,6 +48,9 @@ type ComputerUse struct {
 
 	a11yHealth func() bool
 	waitDBus   func(string, time.Duration) error
+
+	findA11yNodes func(A11yScope, int, A11yFilter, int) ([]*A11yNode, bool, error)
+	fetchA11yNode func(string) (*A11yNode, error)
 }
 
 var _ computeruse.IComputerUse = &ComputerUse{}
