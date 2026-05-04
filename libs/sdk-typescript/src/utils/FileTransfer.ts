@@ -3,10 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Buffer } from 'buffer'
-import busboy from 'busboy'
 import { DaytonaError } from '../errors/DaytonaError'
-import { dynamicImport } from './Import'
+import { dynamicImport, dynamicRequire } from './Import'
 import { collectStreamBytes, toBuffer, toUint8Array } from './Binary'
 import { extractBoundary, getHeader, parseMultipartWithFormData } from './Multipart'
 import { parseMultipart } from './Multipart'
@@ -104,6 +102,9 @@ export async function processDownloadFilesResponseWithBusboy(
   metadataMap: Map<string, DownloadMetadata>,
   onFileStream?: (source: string, fileStream: any) => void,
 ): Promise<void> {
+  const errPrefix = '"downloadFiles" is not supported: '
+  const busboy = dynamicRequire('busboy', errPrefix)
+  const Buffer = (dynamicRequire('buffer', errPrefix) as any).Buffer
   const fileTasks: Promise<void>[] = []
 
   await new Promise<void>((resolve, reject) => {
@@ -188,7 +189,7 @@ export async function processDownloadFilesResponseWithBusboy(
     bb.on('finish', resolve)
 
     // Feed stream into busboy
-    feedStreamToBusboy(stream, bb).catch((err) => bb.destroy(err as Error))
+    feedStreamToBusboy(stream, bb, Buffer).catch((err) => bb.destroy(err as Error))
   })
 
   await Promise.all(fileTasks)
@@ -197,7 +198,7 @@ export async function processDownloadFilesResponseWithBusboy(
 /**
  * Feeds various stream types into busboy
  */
-async function feedStreamToBusboy(stream: any, bb: any): Promise<void> {
+async function feedStreamToBusboy(stream: any, bb: any, Buffer: any): Promise<void> {
   // Node.js stream (piping)
   if (typeof stream?.pipe === 'function') {
     stream.pipe(bb)
