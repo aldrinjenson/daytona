@@ -221,6 +221,21 @@ func run() int {
 		}
 	}()
 
+	// Reap zombie children. The daemon runs as PID 1 inside containers, so
+	// orphaned processes (e.g. from process.exec) get reparented here. Without
+	// reaping, they accumulate as zombies for the container's lifetime.
+	go func() {
+		for {
+			for {
+				pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
+				if pid <= 0 || err != nil {
+					break
+				}
+			}
+			time.Sleep(30 * time.Second)
+		}
+	}()
+
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
