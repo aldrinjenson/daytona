@@ -20,6 +20,7 @@ import { RunnerAdapterFactory } from './sandbox/runner-adapter/runnerAdapter'
 import { RegionType } from './region/enums/region-type.enum'
 import { RunnerState } from './sandbox/enums/runner-state.enum'
 import { OrganizationResourcePermission } from './organization/enums/organization-resource-permission.enum'
+import { SandboxClass } from './sandbox/enums/sandbox-class.enum'
 
 export const DAYTONA_ADMIN_USER_ID = 'daytona-admin'
 
@@ -114,6 +115,7 @@ export class AppService implements OnApplicationBootstrap, OnApplicationShutdown
     this.logger.log(`Creating default runner: ${this.configService.getOrThrow('defaultRunner.name')}`)
 
     const runnerVersion = this.configService.getOrThrow('defaultRunner.apiVersion')
+    const runnerSandboxClass = this.configService.get('defaultRunner.sandboxClass') as SandboxClass | undefined
 
     if (runnerVersion === '0') {
       const { runner } = await this.runnerService.create({
@@ -127,6 +129,7 @@ export class AppService implements OnApplicationBootstrap, OnApplicationShutdown
         domain: this.configService.getOrThrow('defaultRunner.domain'),
         apiVersion: runnerVersion,
         name: this.configService.getOrThrow('defaultRunner.name'),
+        sandboxClass: runnerSandboxClass,
       })
 
       const runnerAdapter = await this.runnerAdapterFactory.create(runner)
@@ -148,6 +151,7 @@ export class AppService implements OnApplicationBootstrap, OnApplicationShutdown
         regionId: this.configService.getOrThrow('defaultRegion.id'),
         apiVersion: runnerVersion,
         name: this.configService.getOrThrow('defaultRunner.name'),
+        sandboxClass: runnerSandboxClass,
       })
 
       this.logger.log(`Waiting for runner ${runner.name} to be healthy...`)

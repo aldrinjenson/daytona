@@ -171,6 +171,7 @@ const configuration = {
     disk: parseInt(process.env.DEFAULT_RUNNER_DISK || '50', 10),
     apiVersion: (process.env.DEFAULT_RUNNER_API_VERSION || '2') as '0' | '2',
     name: process.env.DEFAULT_RUNNER_NAME,
+    sandboxClass: process.env.DEFAULT_RUNNER_SANDBOX_CLASS,
   },
   buildInfo: {
     maxSandboxesPerRunner: parseInt(process.env.BUILD_INFO_MAX_SANDBOXES_PER_RUNNER || '30', 10),

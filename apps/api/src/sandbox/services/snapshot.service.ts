@@ -18,6 +18,7 @@ import { SnapshotRepository } from '../repositories/snapshot.repository'
 import { v4 as uuidv4, validate as isUUID } from 'uuid'
 import { Snapshot } from '../entities/snapshot.entity'
 import { SnapshotState } from '../enums/snapshot-state.enum'
+import { SandboxClass } from '../enums/sandbox-class.enum'
 import { CreateSnapshotDto } from '../dto/create-snapshot.dto'
 import { BuildInfo } from '../entities/build-info.entity'
 import { generateBuildInfoHash as generateBuildSnapshotRef } from '../entities/build-info.entity'
@@ -194,6 +195,7 @@ export class SnapshotService {
           ...createSnapshotDto,
           entrypoint: this.processEntrypoint(entrypoint),
           mem: createSnapshotDto.memory, // Map memory to mem
+          sandboxClass: createSnapshotDto.sandboxClass ?? SandboxClass.CONTAINER,
           state,
           ref,
           general,
@@ -263,6 +265,7 @@ export class SnapshotService {
         ...createSnapshotDto,
         entrypoint: this.processEntrypoint(entrypoint),
         mem: createSnapshotDto.memory, // Map memory to mem
+        sandboxClass: createSnapshotDto.sandboxClass ?? SandboxClass.CONTAINER,
         state: SnapshotState.PENDING,
         general,
         snapshotRegions: [{ snapshotId, regionId: region.id }],

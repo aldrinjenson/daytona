@@ -25,9 +25,12 @@ import { handleApiError } from '@/lib/error-handling'
 import { imageNameSchema } from '@/lib/schema'
 import { getRegionFullDisplayName } from '@/lib/utils'
 import type { SnapshotDto } from '@daytona/api-client'
+import { SandboxClass } from '@daytona/api-client'
 import { useForm } from '@tanstack/react-form'
 import { Plus } from 'lucide-react'
 import { Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { FeatureFlags } from '@/enums/FeatureFlags'
+import { useFeatureFlagEnabled } from 'posthog-js/react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { ScrollArea } from '../ui/scroll-area'
@@ -39,6 +42,11 @@ const snapshotNameSchema = z
   .min(1, 'Snapshot name is required')
   .refine((name) => IMAGE_NAME_REGEX.test(name), 'Only letters, digits, dots, colons, slashes and dashes are allowed')
 
+const SANDBOX_CLASS_OPTIONS: { value: SandboxClass; label: string }[] = [
+  { value: SandboxClass.CONTAINER, label: 'Container' },
+  { value: SandboxClass.LINUX_VM, label: 'Linux VM' },
+]
+
 const formSchema = z.object({
   name: snapshotNameSchema,
   imageName: imageNameSchema,
@@ -47,6 +55,7 @@ const formSchema = z.object({
   memory: z.number().min(1).optional(),
   disk: z.number().min(1).optional(),
   regionId: z.string().optional(),
+  sandboxClass: z.nativeEnum(SandboxClass).optional(),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -59,6 +68,7 @@ const defaultValues: FormValues = {
   memory: undefined,
   disk: undefined,
   regionId: undefined,
+  sandboxClass: SandboxClass.CONTAINER,
 }
 
 export const CreateSnapshotSheet = ({
@@ -72,6 +82,7 @@ export const CreateSnapshotSheet = ({
 }) => {
   const [open, setOpen] = useState(false)
 
+  const sandboxClassEnabled = useFeatureFlagEnabled(FeatureFlags.DASHBOARD_SANDBOX_CLASS)
   const { availableRegions: regions, loadingAvailableRegions: loadingRegions } = useRegions()
   const { selectedOrganization } = useSelectedOrganization()
   const { reset: resetCreateSnapshotMutation, ...createSnapshotMutation } = useCreateSnapshotMutation()
@@ -120,6 +131,7 @@ export const CreateSnapshotSheet = ({
             memory: value.memory,
             disk: value.disk,
             regionId: value.regionId,
+            sandboxClass: sandboxClassEnabled ? value.sandboxClass : undefined,
           },
           organizationId: selectedOrganization.id,
         })
@@ -243,6 +255,34 @@ export const CreateSnapshotSheet = ({
                 </Field>
               )}
             </form.Field>
+
+            {sandboxClassEnabled && (
+              <form.Field name="sandboxClass">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>Sandbox Class</FieldLabel>
+                    <Select
+                      value={field.state.value ?? SandboxClass.CONTAINER}
+                      onValueChange={(value) => field.handleChange(value as SandboxClass)}
+                    >
+                      <SelectTrigger className="h-8" id={field.name}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SANDBOX_CLASS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      The target platform sandboxes created from this snapshot will run on. Defaults to Linux.
+                    </FieldDescription>
+                  </Field>
+                )}
+              </form.Field>
+            )}
 
             <div className="flex flex-col gap-2">
               <Label className="text-sm font-medium">Resources</Label>

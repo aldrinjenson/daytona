@@ -344,7 +344,6 @@ export class SandboxService {
 
     sandbox.organizationId = SANDBOX_WARM_POOL_UNASSIGNED_ORGANIZATION
 
-    sandbox.class = warmPoolItem.class
     sandbox.snapshot = warmPoolItem.snapshot
     //  TODO: default user should be configurable
     sandbox.osUser = 'daytona'
@@ -365,9 +364,11 @@ export class SandboxService {
       throw new BadRequestError(`Snapshot ${sandbox.snapshot} not found while creating warm pool sandbox`)
     }
 
+    sandbox.sandboxClass = snapshot.sandboxClass
+
     const runner = await this.runnerService.getRandomAvailableRunner({
       regions: [sandbox.region],
-      sandboxClass: sandbox.class,
+      sandboxClass: sandbox.sandboxClass,
       snapshotRef: snapshot.ref,
     })
 
@@ -390,8 +391,6 @@ export class SandboxService {
     const region = await this.getValidatedOrDefaultRegion(organization, createSandboxDto.target)
 
     try {
-      const sandboxClass = this.getValidatedOrDefaultClass(createSandboxDto.class)
-
       let snapshotIdOrName = createSandboxDto.snapshot
 
       if (!createSandboxDto.snapshot?.trim()) {
@@ -482,7 +481,6 @@ export class SandboxService {
             organizationId: organization.id,
             snapshot,
             target: region.id,
-            class: createSandboxDto.class,
             cpu: cpu,
             mem: mem,
             disk: disk,
@@ -503,7 +501,7 @@ export class SandboxService {
 
       const runner = await this.runnerService.getRandomAvailableRunner({
         regions: [region.id],
-        sandboxClass,
+        sandboxClass: snapshot.sandboxClass,
         snapshotRef: snapshot.ref,
       })
 
@@ -511,8 +509,7 @@ export class SandboxService {
 
       sandbox.organizationId = organization.id
 
-      //  TODO: make configurable
-      sandbox.class = sandboxClass
+      sandbox.sandboxClass = snapshot.sandboxClass
       sandbox.snapshot = snapshot.name
       //  TODO: default user should be configurable
       sandbox.osUser = createSandboxDto.user || 'daytona'
@@ -662,8 +659,6 @@ export class SandboxService {
     const region = await this.getValidatedOrDefaultRegion(organization, createSandboxDto.target)
 
     try {
-      const sandboxClass = this.getValidatedOrDefaultClass(createSandboxDto.class)
-
       const cpu = createSandboxDto.cpu || DEFAULT_CPU
       const mem = createSandboxDto.memory || DEFAULT_MEMORY
       const disk = createSandboxDto.disk || DEFAULT_DISK
@@ -693,7 +688,7 @@ export class SandboxService {
 
       sandbox.organizationId = organization.id
 
-      sandbox.class = sandboxClass
+      sandbox.sandboxClass = SandboxClass.CONTAINER
       sandbox.osUser = createSandboxDto.user || 'daytona'
       sandbox.env = createSandboxDto.env || {}
       sandbox.labels = createSandboxDto.labels || {}
@@ -728,6 +723,10 @@ export class SandboxService {
         sandbox.volumes = this.resolveVolumes(createSandboxDto.volumes)
       }
 
+      if (sandbox.sandboxClass !== SandboxClass.CONTAINER) {
+        throw new BadRequestError('Declarative builds are only supported for container-class sandboxes')
+      }
+
       const buildInfoSnapshotRef = generateBuildSnapshotRef(
         createSandboxDto.buildInfo.dockerfileContent,
         createSandboxDto.buildInfo.contextHashes,
@@ -747,7 +746,7 @@ export class SandboxService {
             : []
         runner = await this.runnerService.getRandomAvailableRunner({
           regions: [sandbox.region],
-          sandboxClass: sandbox.class,
+          sandboxClass: sandbox.sandboxClass,
           snapshotRef: buildInfoSnapshotRef,
           ...(excludedRunnerIds.length > 0 && { excludedRunnerIds }),
           ...(declarativeBuildScoreThreshold !== undefined && {
@@ -868,7 +867,7 @@ export class SandboxService {
       // Copy all properties from source sandbox to forked sandbox
       const forkedSandbox = new Sandbox(sourceSandbox.region, dto.name)
       forkedSandbox.organizationId = organization.id
-      forkedSandbox.class = sourceSandbox.class
+      forkedSandbox.sandboxClass = sourceSandbox.sandboxClass
       forkedSandbox.snapshot = sourceSandbox.snapshot
       forkedSandbox.osUser = sourceSandbox.osUser
       forkedSandbox.env = { ...sourceSandbox.env }
@@ -2151,18 +2150,6 @@ export class SandboxService {
     }
 
     return region
-  }
-
-  private getValidatedOrDefaultClass(sandboxClass: SandboxClass): SandboxClass {
-    if (!sandboxClass) {
-      return SandboxClass.SMALL
-    }
-
-    if (Object.values(SandboxClass).includes(sandboxClass)) {
-      return sandboxClass
-    } else {
-      throw new BadRequestError('Invalid class')
-    }
   }
 
   async replaceLabels(

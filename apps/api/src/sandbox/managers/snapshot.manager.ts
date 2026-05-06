@@ -342,6 +342,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
           state: RunnerState.READY,
           unschedulable: Not(true),
           region: In([...sharedRegionIds, ...organizationRegionIds]),
+          sandboxClass: snapshot.sandboxClass,
         },
       })
 
@@ -652,7 +653,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
                   // Get an available runner in the same region with the same class
                   const targetRunner = await this.runnerService.getRandomAvailableRunner({
                     regions: [sandbox.region],
-                    sandboxClass: sandbox.class,
+                    sandboxClass: sandbox.sandboxClass,
                     excludedRunnerIds: [runner.id],
                   })
 
@@ -1118,6 +1119,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
 
         initialRunner = await this.runnerService.getRandomAvailableRunner({
           regions: regions.map((region) => region.id),
+          sandboxClass: snapshot.sandboxClass,
           excludedRunnerIds: excludedRunnerIds,
         })
       } catch (error) {

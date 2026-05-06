@@ -338,6 +338,8 @@ export class SandboxManager implements TrackableJobExecutions, OnApplicationShut
                 try {
                   const startScoreThreshold = this.configService.get('runnerScore.thresholds.start') || 0
                   const targetRunner = await this.runnerService.getRandomAvailableRunner({
+                    regions: [sandbox.region],
+                    sandboxClass: sandbox.sandboxClass,
                     snapshotRef: sandbox.backupSnapshot,
                     excludedRunnerIds: [runner.id],
                     availabilityScoreThreshold: startScoreThreshold,

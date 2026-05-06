@@ -99,6 +99,7 @@ export class RunnerService {
           apiUrl: createRunnerDto.apiUrl,
           proxyUrl: createRunnerDto.proxyUrl,
           appVersion: createRunnerDto.appVersion,
+          sandboxClass: createRunnerDto.sandboxClass,
         })
         break
       case '2':
@@ -108,6 +109,7 @@ export class RunnerService {
           apiVersion: createRunnerDto.apiVersion,
           apiKey: apiKey,
           appVersion: createRunnerDto.appVersion,
+          sandboxClass: createRunnerDto.sandboxClass,
         })
         break
       default:
@@ -319,7 +321,7 @@ export class RunnerService {
     }
 
     if (params.sandboxClass !== undefined) {
-      runnerFilter.class = params.sandboxClass
+      runnerFilter.sandboxClass = params.sandboxClass
     }
 
     const runners = await this.runnerRepository.find({
@@ -1074,8 +1076,8 @@ export class RunnerService {
 }
 
 export class GetRunnerParams {
-  regions?: string[]
-  sandboxClass?: SandboxClass
+  regions: string[]
+  sandboxClass: SandboxClass
   snapshotRef?: string
   excludedRunnerIds?: string[]
   availabilityScoreThreshold?: number
