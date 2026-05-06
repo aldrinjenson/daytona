@@ -66,7 +66,7 @@ export class Runner {
     type: 'character varying',
     default: SandboxClass.CONTAINER,
   })
-  sandboxClass = SandboxClass.CONTAINER
+  sandboxClass: SandboxClass = SandboxClass.CONTAINER
 
   @Column({
     type: 'enum',

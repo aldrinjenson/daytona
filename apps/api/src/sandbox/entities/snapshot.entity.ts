@@ -83,7 +83,7 @@ export class Snapshot {
     type: 'character varying',
     default: SandboxClass.CONTAINER,
   })
-  sandboxClass = SandboxClass.CONTAINER
+  sandboxClass: SandboxClass = SandboxClass.CONTAINER
 
   @OneToMany(() => SnapshotRunner, (runner) => runner.snapshotRef)
   runners: SnapshotRunner[]
